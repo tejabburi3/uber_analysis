@@ -1,151 +1,144 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import seaborn as sns
+import matplotlib.pyplot as plt
+import zipfile
+import os
+import pytz
+from datetime import datetime
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+# Define the zip file and the dataset file names
+zip_file_path = "hyderabad_uber_dataset.zip"
+dataset_file_name = "hyderabad_uber_dataset.csv"  # Replace with the exact file name inside the zip
+
+# Check if the dataset is already extracted; if not, extract it
+if not os.path.exists(dataset_file_name):
+    with zipfile.ZipFile(zip_file_path, 'r') as z:
+        z.extractall()  # Extracts all files in the current directory
+        print(f"Extracted {dataset_file_name} from {zip_file_path}")
+
+# Load the dataset
+data = pd.read_csv(dataset_file_name)  # Load the dataset into the DataFrame
+data['Pickup_datetime'] = pd.to_datetime(data['Pickup_datetime'], errors='coerce')
+
+# Convert Pickup_datetime to India timezone if not already timezone-aware
+india_timezone = pytz.timezone('Asia/Kolkata')
+data['Pickup_datetime'] = data['Pickup_datetime'].dt.tz_localize('UTC').dt.tz_convert(india_timezone)
+
+# Extract the hour from the Pickup_datetime
+data['Hour_of_day'] = data['Pickup_datetime'].dt.hour
+
+# Calculate demand and supply per hour and area
+demand_per_hour_area = data.groupby(['Pickup_location', 'Hour_of_day', 'Vehicle_mode']).size().reset_index(name='Demand')
+supply_per_hour_area = data[data['Ride_status'] == 'Completed'].groupby(
+    ['Pickup_location', 'Hour_of_day', 'Vehicle_mode']
+).size().reset_index(name='Supply')
+
+# Pivot tables for demand and supply
+pivot_demand_area = demand_per_hour_area.pivot_table(
+    index=['Pickup_location', 'Vehicle_mode'], columns='Hour_of_day', values='Demand', fill_value=0
+)
+pivot_supply_area = supply_per_hour_area.pivot_table(
+    index=['Pickup_location', 'Vehicle_mode'], columns='Hour_of_day', values='Supply', fill_value=0
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+# Get the current hour
+current_hour = datetime.now(india_timezone).hour
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+# Initialize Streamlit session state for login status
+if 'is_logged_in' not in st.session_state:
+    st.session_state.is_logged_in = False
+    st.session_state.driver_id = None
+    st.session_state.selected_area = None
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+# Streamlit app title
+st.title("UBER Driver Login Page")
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+# Check if the driver is logged in
+if not st.session_state.is_logged_in:
+    # Ask the user to enter their Driver ID
+    driver_id_input = st.text_input("Enter your Driver ID (e.g., 2111)")
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    if st.button("Login"):
+        if driver_id_input:
+            try:
+                driver_id_input_int = int(driver_id_input)  # Convert to integer
+            except ValueError:
+                st.error("Please enter a valid numeric Driver ID.")
+            else:
+                if driver_id_input_int in data['Driver_id'].values:
+                    # Mark the driver as logged in
+                    st.session_state.is_logged_in = True
+                    st.session_state.driver_id = driver_id_input_int
+                else:
+                    st.error(f"Driver ID {driver_id_input} not found in the dataset. Please check your ID and try again.")
+else:
+    # Driver is logged in, show their details
+    driver_id = st.session_state.driver_id
+    # st.success(f"Driver {driver_id} found! Proceeding with login...")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+    # Filter data for the driver
+    driver_data = data[data['Driver_id'] == driver_id]
+
+    # Count the number of completed rides by vehicle type
+    completed_rides = driver_data[driver_data['Ride_status'] == 'Completed']
+    ride_counts = completed_rides['Vehicle_mode'].value_counts()
+
+    # Display congratulatory message for each vehicle type
+    for vehicle, count in ride_counts.items():
+        st.success(f"Congratulations! You have completed a total of {count} rides on {vehicle}.")
+
+    # Sidebar for visualizing the top 3 demand areas
+    st.sidebar.title("Top Demand Areas")
+
+    # Filter demand data for the current hour and the driver's vehicle mode
+    current_hour_demand_all_areas = demand_per_hour_area[
+        (demand_per_hour_area['Hour_of_day'] == current_hour) & 
+        (demand_per_hour_area['Vehicle_mode'].isin(ride_counts.index))
+    ]
+
+    # Group the demand by Pickup_location and sort by Demand in descending order
+    demand_summary = (
+        current_hour_demand_all_areas.groupby('Pickup_location')['Demand']
+        .sum()
+        .reset_index()
+        .sort_values(by='Demand', ascending=False)
     )
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    # Format the current hour for display in 12-hour format
+    formatted_current_hour = f"{current_hour % 12 or 12} {'AM' if current_hour < 12 else 'PM'}"
+    
+    # Add visualization of the top 3 demand areas in the sidebar
+    st.sidebar.success(f"### Top 3 Areas with Highest Demand for {vehicle}  Bookings at  {formatted_current_hour}")
+    for index, row in demand_summary.head(3).iterrows():
+        st.sidebar.success(f"**{row['Pickup_location']}**: {row['Demand']} rides per hour")
 
-    return gdp_df
+    # Display all demand counts for the driver's vehicle on the main page
+    st.write("### Rides Booking  Across All Areas in current hour ")
+    for index, row in demand_summary.iterrows():
+        st.write(f"**{row['Pickup_location']}**: {row['Demand']}  rides Bookings")
 
-gdp_df = get_gdp_data()
+    # Analyze demand and supply for the selected area
+    areas = data['Pickup_location'].unique()  # Extract unique areas from the dataset
+    selected_area = st.selectbox(
+        "Select the area you are currently in:",
+        ["Select an area"] + list(areas),  # Add a placeholder as the first option
+        index=0
+    )
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+    if selected_area != "Select an area":
+        st.session_state.selected_area = selected_area
+        st.success(f"Your current location is: {selected_area}")
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+        filtered_demand = pivot_demand_area.loc[(selected_area, vehicle)]
+        filtered_supply = pivot_supply_area.loc[(selected_area, vehicle)]
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+        max_demand_hour = filtered_demand.idxmax()
+        max_demand = filtered_demand[max_demand_hour]
+        max_supply = filtered_supply[max_demand_hour]
 
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+        # Format the hour to 12-hour format with AM/PM for the max demand
+        formatted_max_demand_hour = f"{max_demand_hour % 12 or 12} {'AM' if max_demand_hour < 12 else 'PM'}"
+        
+        st.write(f"**Highest Demand of {vehicle} in {selected_area}:** {max_demand} rides at {formatted_max_demand_hour}.")
+        st.write(f"**Supply at this time:** {max_supply} rides.")
