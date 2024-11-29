@@ -9,7 +9,7 @@ from datetime import datetime
 
 # Define the zip file and the dataset file names
 zip_file_path = "hyderabad_uber_dataset12.zip"
-dataset_file_name = "hyderabad_uber_dataset.csv"  # Replace with the exact file name inside the zip
+dataset_file_name = "hyderabad_uber_dataset12.csv"  # Replace with the exact file name inside the zip
 
 # Check if the dataset is already extracted; if not, extract it
 if not os.path.exists(dataset_file_name):
