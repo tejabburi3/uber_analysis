@@ -20,7 +20,7 @@ if not os.path.exists(dataset_file_name):
 # Load the dataset
 data = pd.read_csv(dataset_file_name)  # Load the dataset into the DataFrame
 
-
+st.write(data.columns)
 # Strip whitespace from column nam
 
 # Convert Pickup_datetime to datetime
