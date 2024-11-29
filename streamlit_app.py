@@ -19,6 +19,14 @@ if not os.path.exists(dataset_file_name):
 
 # Load the dataset
 data = pd.read_csv(dataset_file_name)  # Load the dataset into the DataFrame
+
+# Debugging: Print the columns of the DataFrame
+print("Columns in the dataset:", data.columns)
+
+# Strip whitespace from column names
+data.columns = data.columns.str.strip()
+
+# Convert Pickup_datetime to datetime
 data['Pickup_datetime'] = pd.to_datetime(data['Pickup_datetime'], errors='coerce')
 
 # Convert Pickup_datetime to India timezone if not already timezone-aware
@@ -69,20 +77,23 @@ if not st.session_state.is_logged_in:
                 st.error("Please enter a valid numeric Driver ID.")
             else:
                 # Check if Driver ID and Email match
-                driver_data = data[(data['Driver_id'] == driver_id_input_int) & (data['Email'] == email_input)]
-                if not driver_data.empty:
-                    # Mark the driver as logged in
-                    st.session_state.is_logged_in = True
-                    st.session_state.driver_id = driver_id_input_int
-                    st.session_state.driver_email = email_input
+                if 'Driver_id' in data.columns and 'Email' in data.columns:
+                    driver_data = data[(data['Driver_id'] == driver_id_input_int) & (data['Email'] == email_input)]
+                    if not driver_data.empty:
+                        # Mark the driver as logged in
+                        st.session_state.is_logged_in = True
+                        st.session_state.driver_id = driver_id_input_int
+                        st.session_state.driver_email = email_input
+                    else:
+                        st.error("Driver ID and Email do not match. Please check your details and try again.")
                 else:
-                    st.error("Driver ID and Email do not match. Please check your details and try again.")
+                    st.error("Required columns are missing from the dataset.")
 else:
     # Driver is logged in, show their details
     driver_id = st.session_state.driver_id
     email = st.session_state.driver_email
 
-    st.success(f"Login  in successfully !")
+    st.success(f"Login in successfully!")
 
     # Filter data for the driver
     driver_data = data[data['Driver_id'] == driver_id]
@@ -116,12 +127,12 @@ else:
     formatted_current_hour = f"{current_hour % 12 or 12} {'AM' if current_hour < 12 else 'PM'}"
     
     # Add visualization of the top 3 demand areas in the sidebar
-    st.sidebar.success(f"### Top 3 Areas with Highest Demand for {vehicle}  Bookings at  {formatted_current_hour}")
+    st.sidebar.success(f"### Top 3 Areas with Highest Demand for {vehicle} Bookings at {formatted_current_hour}")
     for index, row in demand_summary.head(3).iterrows():
         st.sidebar.success(f"**{row['Pickup_location']}**: {row['Demand']} rides per hour")
 
     # Display all demand counts for the driver's vehicle on the main page
-    st.write("### Rides Booking  Across All Areas in current hour ")
+    st.write("### Rides Booking Across All Areas in current hour ")
     for index, row in demand_summary.iterrows():
         st.write(f"**{row['Pickup_location']}**: {row['Demand']} rides Bookings")
 
