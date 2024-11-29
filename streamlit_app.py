@@ -82,7 +82,7 @@ else:
     driver_id = st.session_state.driver_id
     email = st.session_state.driver_email
 
-    st.success(f"Login  in successfully !")
+    st.success(f"Successfully logged in as Driver ID: {driver_id} ({email})")
 
     # Filter data for the driver
     driver_data = data[data['Driver_id'] == driver_id]
@@ -116,14 +116,14 @@ else:
     formatted_current_hour = f"{current_hour % 12 or 12} {'AM' if current_hour < 12 else 'PM'}"
     
     # Add visualization of the top 3 demand areas in the sidebar
-    st.sidebar.success(f"### Top 3 Areas with Highest Demand for {vehicle}  Bookings at  {formatted_current_hour}")
+    st.sidebar.success(f"### Top 3 Areas with Highest Demand at {formatted_current_hour}")
     for index, row in demand_summary.head(3).iterrows():
         st.sidebar.success(f"**{row['Pickup_location']}**: {row['Demand']} rides per hour")
 
     # Display all demand counts for the driver's vehicle on the main page
-    st.write("### Rides Booking  Across All Areas in current hour ")
+    st.write("### Ride Bookings Across All Areas in the Current Hour")
     for index, row in demand_summary.iterrows():
-        st.write(f"**{row['Pickup_location']}**: {row['Demand']} rides Bookings")
+        st.write(f"**{row['Pickup_location']}**: {row['Demand']} ride bookings")
 
     # Analyze demand and supply for the selected area
     areas = data['Pickup_location'].unique()  # Extract unique areas from the dataset
@@ -137,8 +137,8 @@ else:
         st.session_state.selected_area = selected_area
         st.success(f"Your current location is: {selected_area}")
 
-        filtered_demand = pivot_demand_area.loc[(selected_area, vehicle)]
-        filtered_supply = pivot_supply_area.loc[(selected_area, vehicle)]
+        filtered_demand = pivot_demand_area.loc[(selected_area, ride_counts.index[0])]
+        filtered_supply = pivot_supply_area.loc[(selected_area, ride_counts.index[0])]
 
         max_demand_hour = filtered_demand.idxmax()
         max_demand = filtered_demand[max_demand_hour]
@@ -147,6 +147,5 @@ else:
         # Format the hour to 12-hour format with AM/PM for the max demand
         formatted_max_demand_hour = f"{max_demand_hour % 12 or 12} {'AM' if max_demand_hour < 12 else 'PM'}"
         
-        st.write(f"**Highest Demand of {vehicle} in {selected_area}:** {max_demand} rides at {formatted_max_demand_hour}.")
+        st.write(f"**Highest Demand in {selected_area}:** {max_demand} rides at {formatted_max_demand_hour}.")
         st.write(f"**Supply at this time:** {max_supply} rides.")
-
