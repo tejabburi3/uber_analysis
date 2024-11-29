@@ -55,10 +55,6 @@ if 'is_logged_in' not in st.session_state:
 # Streamlit app title
 st.title("UBER Driver Login Page")
 
-# Debugging tool: Show dataset columns
-if st.button("Show Dataset Columns"):
-    st.write(data.columns)
-
 # Check if the driver is logged in
 if not st.session_state.is_logged_in:
     # Ask the user to enter their Driver ID and Email Address
