@@ -49,6 +49,7 @@ current_hour = datetime.now(india_timezone).hour
 if 'is_logged_in' not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.driver_id = None
+    st.session_state.driver_email = None
     st.session_state.selected_area = None
 
 # Streamlit app title
@@ -56,26 +57,32 @@ st.title("UBER Driver Login Page")
 
 # Check if the driver is logged in
 if not st.session_state.is_logged_in:
-    # Ask the user to enter their Driver ID
+    # Ask the user to enter their Driver ID and Email Address
     driver_id_input = st.text_input("Enter your Driver ID (e.g., 2111)")
+    email_input = st.text_input("Enter your Email Address")
 
     if st.button("Login"):
-        if driver_id_input:
+        if driver_id_input and email_input:
             try:
-                driver_id_input_int = int(driver_id_input)  # Convert to integer
+                driver_id_input_int = int(driver_id_input)  # Convert Driver ID to integer
             except ValueError:
                 st.error("Please enter a valid numeric Driver ID.")
             else:
-                if driver_id_input_int in data['Driver_id'].values:
+                # Check if Driver ID and Email match
+                driver_data = data[(data['Driver_id'] == driver_id_input_int) & (data['Email'] == email_input)]
+                if not driver_data.empty:
                     # Mark the driver as logged in
                     st.session_state.is_logged_in = True
                     st.session_state.driver_id = driver_id_input_int
+                    st.session_state.driver_email = email_input
                 else:
-                    st.error(f"Driver ID {driver_id_input} not found in the dataset. Please check your ID and try again.")
+                    st.error("Driver ID and Email do not match. Please check your details and try again.")
 else:
     # Driver is logged in, show their details
     driver_id = st.session_state.driver_id
-    # st.success(f"Driver {driver_id} found! Proceeding with login...")
+    email = st.session_state.driver_email
+
+    st.success(f"Login  in successfully !")
 
     # Filter data for the driver
     driver_data = data[data['Driver_id'] == driver_id]
@@ -116,7 +123,7 @@ else:
     # Display all demand counts for the driver's vehicle on the main page
     st.write("### Rides Booking  Across All Areas in current hour ")
     for index, row in demand_summary.iterrows():
-        st.write(f"**{row['Pickup_location']}**: {row['Demand']}  rides Bookings")
+        st.write(f"**{row['Pickup_location']}**: {row['Demand']} rides Bookings")
 
     # Analyze demand and supply for the selected area
     areas = data['Pickup_location'].unique()  # Extract unique areas from the dataset
@@ -142,3 +149,4 @@ else:
         
         st.write(f"**Highest Demand of {vehicle} in {selected_area}:** {max_demand} rides at {formatted_max_demand_hour}.")
         st.write(f"**Supply at this time:** {max_supply} rides.")
+
